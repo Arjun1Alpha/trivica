@@ -14,7 +14,7 @@ Detector = {
 
 		var domElement = document.createElement( 'div' );
 
-		domElement.style.fontFamily = 'monospace';
+		domElement.style.fontFamily = 'fino-sans';
 		domElement.style.fontSize = '13px';
 		domElement.style.textAlign = 'center';
 		domElement.style.background = '#eee';
