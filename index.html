@@ -134,27 +134,7 @@
         will-change: transform;
       }
 
-      .sun-glow {
-        position: fixed;
-        left: 55%;
-        bottom: 8%;
-        width: 28vmin;
-        height: 28vmin;
-        transform: translate(-50%, 50%);
-        background: radial-gradient(
-          circle at center,
-          #fff8e0 0%,
-          #ffd966 12%,
-          #f5b042 25%,
-          #e8923a 45%,
-          rgba(232, 146, 58, 0.6) 65%,
-          rgba(232, 146, 58, 0.2) 85%,
-          transparent 100%
-        );
-        border-radius: 50%;
-        z-index: 0;
-        pointer-events: none;
-      }
+      
 
       /* Loading screen – minimalist like reference */
       #loadingScreen {
@@ -330,7 +310,6 @@
       </div>
     </div>
 
-    <div class="sun-glow" aria-hidden="true"></div>
     <div class="hero-text-wrap" aria-live="polite">
       <div class="hero-text-scene" id="heroTextScene">
         <div class="hero-text-enter-wrap" id="heroEnterWrap">
