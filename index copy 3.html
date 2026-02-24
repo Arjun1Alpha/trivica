@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <title>TRIBECA — Beyond the Skyline</title>
@@ -54,64 +54,8 @@
         width: 100%;
         height: 100%;
         transform-style: preserve-3d;
-        transform: translateY(0) translateZ(0) rotateX(0) rotateY(0);
-      }
-      .hero-text-scene.fly-turn-1 {
-        animation: scene-fly-1 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
-      }
-      .hero-text-scene.fly-turn-2 {
-        animation: scene-fly-2 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
-      }
-      .hero-text-scene.fly-turn-3 {
-        animation: scene-fly-3 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
-      }
-      .hero-text-scene.fly-turn-4 {
-        animation: scene-fly-4 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
-      }
-      @keyframes scene-fly-1 {
-        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
-        42% { transform: translateY(-26px) translateZ(50px) rotateX(-4deg) rotateY(5deg); }
-      }
-      @keyframes scene-fly-2 {
-        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
-        42% { transform: translateY(22px) translateZ(48px) rotateX(3deg) rotateY(-5deg); }
-      }
-      @keyframes scene-fly-3 {
-        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
-        42% { transform: translateY(-18px) translateZ(62px) rotateX(-2deg) rotateY(8deg); }
-      }
-      @keyframes scene-fly-4 {
-        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
-        42% { transform: translateY(20px) translateZ(45px) rotateX(3deg) rotateY(-6deg); }
       }
 
-      .hero-text-enter-wrap {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        transform-style: preserve-3d;
-        pointer-events: none;
-      }
-      .hero-text-enter-wrap .hero-text {
-        left: 50%;
-        top: 50%;
-      }
-      .hero-text-enter-wrap.camera-enter {
-        animation: camera-enter-o 2.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-      }
-      @keyframes camera-enter-o {
-        0% {
-          transform: translateZ(-320px) scale(2.2);
-        }
-        100% {
-          transform: translateZ(0) scale(1);
-        }
-      }
-      .portal-o {
-        display: inline;
-      }
       .hero-text {
         position: absolute;
         left: 50%;
@@ -333,11 +277,7 @@
     <div class="sun-glow" aria-hidden="true"></div>
     <div class="hero-text-wrap" aria-live="polite">
       <div class="hero-text-scene" id="heroTextScene">
-        <div class="hero-text-enter-wrap" id="heroEnterWrap">
-          <div class="hero-text" data-index="0">
-            Bey<span class="portal-o" id="portalO">o</span>nd the Skyline.
-          </div>
-        </div>
+        <div class="hero-text" data-index="0">Beyond the Skyline.</div>
         <div class="hero-text" data-index="1">Rare by Nature.</div>
         <div class="hero-text" data-index="2">Designed to Outlast.</div>
         <div class="hero-text" data-index="3">Built for Eternity.</div>
@@ -424,8 +364,6 @@
     <script type="text/javascript">
       (function () {
         var sceneEl = document.getElementById("heroTextScene");
-        var enterWrap = document.getElementById("heroEnterWrap");
-        var portalO = document.getElementById("portalO");
         var textEls = document.querySelectorAll(".hero-text-wrap .hero-text");
         var step = 1600;
         var idx = 0;
@@ -452,35 +390,9 @@
             var z = (idx - i) * step;
             var scale = i === idx ? 1 : 0;
             textEls[i].style.transform =
-              "translate(-50%, -50%) translateZ(" +
-              z +
-              "px) scale(" +
-              scale +
-              ")";
+              "translate(-50%, -50%) translateZ(" + z + "px) scale(" + scale + ")";
             textEls[i].style.zIndex = i === idx ? zIndexCurrent : zIndexOther;
             textEls[i].style.opacity = i === idx ? "1" : "0";
-          }
-          if (enterWrap) {
-            if (idx === 0) {
-              function setOriginFromO() {
-                if (portalO && enterWrap) {
-                  var wr = enterWrap.getBoundingClientRect();
-                  var sr = portalO.getBoundingClientRect();
-                  var ox = sr.left - wr.left + sr.width / 2;
-                  var oy = sr.top - wr.top + sr.height / 2;
-                  enterWrap.style.transformOrigin = ox + "px " + oy + "px";
-                }
-              }
-              setOriginFromO();
-              requestAnimationFrame(function () {
-                setOriginFromO();
-                enterWrap.classList.remove("camera-enter");
-                enterWrap.offsetHeight;
-                enterWrap.classList.add("camera-enter");
-              });
-            } else {
-              enterWrap.classList.remove("camera-enter");
-            }
           }
         }
         updateTransforms();
@@ -492,18 +404,6 @@
           debounce = true;
           window.cloudSpeedBoost = nextIdx > idx ? 5 : -5;
           idx = nextIdx;
-          if (sceneEl) {
-            var flyClasses = ["fly-turn-1", "fly-turn-2", "fly-turn-3", "fly-turn-4"];
-            flyClasses.forEach(function (c) { sceneEl.classList.remove(c); });
-            sceneEl.offsetHeight;
-            var pick = flyClasses[Math.floor(Math.random() * 4)];
-            sceneEl.classList.add(pick);
-            var onDone = function () {
-              flyClasses.forEach(function (c) { sceneEl.classList.remove(c); });
-              sceneEl.removeEventListener("animationend", onDone);
-            };
-            sceneEl.addEventListener("animationend", onDone);
-          }
           updateTransforms();
           setTimeout(function () {
             debounce = false;
@@ -631,7 +531,7 @@
             document.body.appendChild(el);
           },
         );
-        texture.magFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearMipMapLinearFilter;
         texture.minFilter = THREE.LinearMipMapLinearFilter;
 
         var fog = new THREE.Fog(0xa8d4e8, -100, 3000);
