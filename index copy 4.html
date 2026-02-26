@@ -54,13 +54,35 @@
         width: 100%;
         height: 100%;
         transform-style: preserve-3d;
-        transform: translateY(0) rotateX(0) rotateY(0);
+        transform: translateY(0) translateZ(0) rotateX(0) rotateY(0);
       }
-      .hero-text-scene.scrub-fly {
-        transition: none;
+      .hero-text-scene.fly-turn-1 {
+        animation: scene-fly-1 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
       }
-      .hero-text-wrap.scrubbing .hero-text {
-        transition: none;
+      .hero-text-scene.fly-turn-2 {
+        animation: scene-fly-2 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
+      }
+      .hero-text-scene.fly-turn-3 {
+        animation: scene-fly-3 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
+      }
+      .hero-text-scene.fly-turn-4 {
+        animation: scene-fly-4 1.35s cubic-bezier(0.33, 1, 0.68, 1) forwards;
+      }
+      @keyframes scene-fly-1 {
+        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
+        42% { transform: translateY(-26px) translateZ(50px) rotateX(-4deg) rotateY(5deg); }
+      }
+      @keyframes scene-fly-2 {
+        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
+        42% { transform: translateY(22px) translateZ(48px) rotateX(3deg) rotateY(-5deg); }
+      }
+      @keyframes scene-fly-3 {
+        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
+        42% { transform: translateY(-18px) translateZ(62px) rotateX(-2deg) rotateY(8deg); }
+      }
+      @keyframes scene-fly-4 {
+        0%, 100% { transform: translateY(0) translateZ(0) rotateX(0deg) rotateY(0deg); }
+        42% { transform: translateY(20px) translateZ(45px) rotateX(3deg) rotateY(-6deg); }
       }
 
       .hero-text-enter-wrap {
@@ -81,10 +103,10 @@
       }
       @keyframes camera-enter-o {
         0% {
-          transform: scale(2.2);
+          transform: translateZ(-320px) scale(2.2);
         }
         100% {
-          transform: scale(1);
+          transform: translateZ(0) scale(1);
         }
       }
       .portal-o {
@@ -378,7 +400,6 @@
       })();
     </script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script type="text/javascript">
       (function () {
         var sceneEl = document.getElementById("heroTextScene");
@@ -387,25 +408,23 @@
         var textEls = document.querySelectorAll(".hero-text-wrap .hero-text");
         var step = 1600;
         var idx = 0;
-        var scrollThreshold = 4;
+        var scrollThreshold = 50;
         var touchStartY = 0;
+        var debounce = false;
+        var transitionDuration = 1500;
         var zIndexCurrent = 20;
         var zIndexOther = 0;
 
-        var SCRUB_RANGE = 420;
-        var scrubTo = null;
-        var scrubState = { progress: 0 };
-        var scrubTween = null;
-        var scrubVariant = 1;
-        var flyPeaks = [
-          { ty: -26, tz: 50, rx: -4, ry: 5 },
-          { ty: 22, tz: 48, rx: 3, ry: -5 },
-          { ty: -18, tz: 62, rx: -2, ry: 8 },
-          { ty: 20, tz: 45, rx: 3, ry: -6 },
-        ];
+        /*
+         * On each scroll (one line change):
+         * - z-index: only the current line has zIndexCurrent (20), others have zIndexOther (0).
+         *   So when you scroll, the line that becomes current goes 0 -> 20, the previous current goes 20 -> 0.
+         * - translateZ (3D depth): z = (idx - i) * step.
+         *   Current line: z = 0. Next line: z = -step (-280px). Previous: z = +step (+280px).
+         *   So per scroll, each line's translateZ changes by step (280px) in the right direction.
+         */
 
         window.cloudSpeedBoost = 1;
-        var cameraEnterPlayed = false;
 
         function updateTransforms() {
           for (var i = 0; i < textEls.length; i++) {
@@ -422,27 +441,22 @@
           }
           if (enterWrap) {
             if (idx === 0) {
-              if (!cameraEnterPlayed) {
-                cameraEnterPlayed = true;
-                function setOriginFromO() {
-                  if (portalO && enterWrap) {
-                    var wr = enterWrap.getBoundingClientRect();
-                    var sr = portalO.getBoundingClientRect();
-                    var ox = sr.left - wr.left + sr.width / 2;
-                    var oy = sr.top - wr.top + sr.height / 2;
-                    enterWrap.style.transformOrigin = ox + "px " + oy + "px";
-                  }
+              function setOriginFromO() {
+                if (portalO && enterWrap) {
+                  var wr = enterWrap.getBoundingClientRect();
+                  var sr = portalO.getBoundingClientRect();
+                  var ox = sr.left - wr.left + sr.width / 2;
+                  var oy = sr.top - wr.top + sr.height / 2;
+                  enterWrap.style.transformOrigin = ox + "px " + oy + "px";
                 }
-                setOriginFromO();
-                requestAnimationFrame(function () {
-                  setOriginFromO();
-                  enterWrap.classList.remove("camera-enter");
-                  enterWrap.offsetHeight;
-                  enterWrap.classList.add("camera-enter");
-                });
-              } else {
-                enterWrap.classList.remove("camera-enter");
               }
+              setOriginFromO();
+              requestAnimationFrame(function () {
+                setOriginFromO();
+                enterWrap.classList.remove("camera-enter");
+                enterWrap.offsetHeight;
+                enterWrap.classList.add("camera-enter");
+              });
             } else {
               enterWrap.classList.remove("camera-enter");
             }
@@ -450,150 +464,37 @@
         }
         updateTransforms();
 
-        function flyAmount(p) {
-          return p <= 0.42 ? p / 0.42 : (1 - p) / 0.58;
-        }
-
-        function scrubApply(progress) {
-          if (scrubTo === null) return;
-          var fromIdx = idx;
-          var toIdx = scrubTo;
-          if (fromIdx === toIdx) {
-            scrubTo = null;
-            updateTransforms();
-            return;
-          }
-
-          var dir = toIdx > fromIdx ? 1 : -1;
-          // u हमेशा 0 → 1 जाता है, चाहे scroll down हो या up
-          var u = dir > 0 ? progress : 1 - progress;
-
-          var peak = flyPeaks[scrubVariant - 1];
-          var t = flyAmount(u);
-          var ty = peak.ty * t;
-          var tz = peak.tz * t;
-          var rx = peak.rx * t;
-          var ry = peak.ry * t;
+        function goToLine(nextIdx) {
+          if (debounce) return;
+          nextIdx = Math.max(0, Math.min(nextIdx, textEls.length - 1));
+          if (nextIdx === idx) return;
+          debounce = true;
+          window.cloudSpeedBoost = nextIdx > idx ? 5 : -5;
+          idx = nextIdx;
           if (sceneEl) {
-            sceneEl.classList.add("scrub-fly");
-            sceneEl.style.transform =
-              "translateY(" + ty + "px) translateZ(" + tz + "px) rotateX(" + rx + "deg) rotateY(" + ry + "deg)";
-          }
-
-          // दो स्टेट्स के बीच लाइनियर इंटरपोलेशन:
-          // A: current idx, B: target scrubTo
-          var fromZ = u * dir * step;          // 0 → ±step
-          var toZ = -(1 - u) * dir * step;     // ∓step → 0
-          var fromScale = 1 - u;               // 1 → 0
-          var toScale = u;                     // 0 → 1
-
-          var fromZi, toZi;
-          if (u < 0.5) {
-            fromZi = zIndexCurrent;
-            toZi = zIndexOther;
-          } else {
-            fromZi = zIndexOther;
-            toZi = zIndexCurrent;
-          }
-
-          for (var i = 0; i < textEls.length; i++) {
-            if (i === fromIdx) {
-              textEls[i].style.transform =
-                "translate(-50%, -50%) translateZ(" + fromZ + "px) scale(" + fromScale + ")";
-              textEls[i].style.zIndex = fromZi;
-              textEls[i].style.opacity = String(fromScale);
-            } else if (i === toIdx) {
-              textEls[i].style.transform =
-                "translate(-50%, -50%) translateZ(" + toZ + "px) scale(" + toScale + ")";
-              textEls[i].style.zIndex = toZi;
-              textEls[i].style.opacity = String(toScale);
-            } else {
-              var baseZ = (idx - i) * step;
-              textEls[i].style.transform =
-                "translate(-50%, -50%) translateZ(" + baseZ + "px) scale(0)";
-              textEls[i].style.zIndex = zIndexOther;
-              textEls[i].style.opacity = "0";
-            }
-          }
-        }
-
-        function commitScrub() {
-          if (scrubTo === null) return;
-          var newIdx = scrubTo;
-          scrubTo = null;
-          scrubTween = null;
-          idx = newIdx;
-          if (sceneEl) {
-            sceneEl.classList.remove("scrub-fly");
-            sceneEl.style.transform = "";
-            if (sceneEl.parentElement) sceneEl.parentElement.classList.remove("scrubbing");
+            var flyClasses = ["fly-turn-1", "fly-turn-2", "fly-turn-3", "fly-turn-4"];
+            flyClasses.forEach(function (c) { sceneEl.classList.remove(c); });
+            sceneEl.offsetHeight;
+            var pick = flyClasses[Math.floor(Math.random() * 4)];
+            sceneEl.classList.add(pick);
+            var onDone = function () {
+              flyClasses.forEach(function (c) { sceneEl.classList.remove(c); });
+              sceneEl.removeEventListener("animationend", onDone);
+            };
+            sceneEl.addEventListener("animationend", onDone);
           }
           updateTransforms();
           setTimeout(function () {
+            debounce = false;
             window.cloudSpeedBoost = 1;
-          }, 400);
-        }
-
-        function cancelScrub() {
-          if (scrubTo === null) return;
-          scrubTo = null;
-          scrubTween = null;
-          if (sceneEl) {
-            sceneEl.classList.remove("scrub-fly");
-            sceneEl.style.transform = "";
-            if (sceneEl.parentElement) sceneEl.parentElement.classList.remove("scrubbing");
-          }
-          updateTransforms();
-          window.cloudSpeedBoost = 1;
-        }
-
-        function applyScrollDelta(dy) {
-          if (scrubTo !== null) {
-            var deltaUnit = dy / SCRUB_RANGE;
-            if (deltaUnit > 0.4) deltaUnit = 0.4;
-            if (deltaUnit < -0.4) deltaUnit = -0.4;
-            var target = scrubState.progress + deltaUnit;
-            target = Math.max(0, Math.min(1, target));
-            if (scrubTween) scrubTween.kill();
-            scrubTween = gsap.to(scrubState, {
-              progress: target,
-              duration: 0.22,
-              ease: "power1.out",
-              onUpdate: function () {
-                var p = scrubState.progress;
-                scrubApply(p);
-                if (scrubTo === null) return;
-                if (scrubTo > idx && p >= 0.998) {
-                  if (scrubTween) scrubTween.kill();
-                  commitScrub();
-                } else if (scrubTo < idx && p <= 0.002) {
-                  if (scrubTween) scrubTween.kill();
-                  commitScrub();
-                } else if (scrubTo > idx && p <= 0.002) {
-                  if (scrubTween) scrubTween.kill();
-                  cancelScrub();
-                } else if (scrubTo < idx && p >= 0.998) {
-                  if (scrubTween) scrubTween.kill();
-                  cancelScrub();
-                }
-              },
-            });
-            return;
-          }
-          if (Math.abs(dy) < scrollThreshold) return;
-          var nextIdx = dy > 0 ? idx + 1 : idx - 1;
-          nextIdx = Math.max(0, Math.min(nextIdx, textEls.length - 1));
-          if (nextIdx === idx) return;
-          scrubTo = nextIdx;
-          scrubState.progress = nextIdx > idx ? 0 : 1;
-          scrubVariant = 1 + Math.floor(Math.random() * 4);
-          window.cloudSpeedBoost = nextIdx > idx ? 5 : -5;
-          if (sceneEl && sceneEl.parentElement) sceneEl.parentElement.classList.add("scrubbing");
-          scrubApply(scrubState.progress);
+          }, transitionDuration + 50);
         }
 
         function onScroll(e) {
-          applyScrollDelta(e.deltaY || 0);
+          var dy = e.deltaY || 0;
+          if (Math.abs(dy) < scrollThreshold) return;
+          if (dy > 0) goToLine(idx + 1);
+          else goToLine(idx - 1);
         }
 
         function onTouchStart(e) {
@@ -603,7 +504,9 @@
         function onTouchEnd(e) {
           var touchEndY = e.changedTouches[0].clientY;
           var dy = touchEndY - touchStartY;
-          applyScrollDelta(-dy);
+          if (Math.abs(dy) < scrollThreshold) return;
+          if (dy > 0) goToLine(idx - 1);
+          else goToLine(idx + 1);
         }
 
         window.addEventListener("wheel", onScroll, { passive: true });
@@ -661,6 +564,8 @@
       var mesh, geometry, material;
 
       var start_time = Date.now();
+      var mouseX = 0;
+      var mouseXTarget = 0;
       var cloudPosition = 0;
       var lastCloudTime = Date.now();
       var cloudBoostCurrent = 1;
@@ -755,6 +660,11 @@
         container.appendChild(blueOverlay);
 
         window.addEventListener("resize", onWindowResize, false);
+        window.addEventListener("mousemove", onMouseMove, false);
+      }
+
+      function onMouseMove(event) {
+        mouseXTarget = (event.clientX / window.innerWidth) * 2 - 1;
       }
 
       function updateBgGradient() {
@@ -787,7 +697,8 @@
         cloudPosition = cloudPosition + speed * delta;
         cloudPosition = ((cloudPosition % 8000) + 8000) % 8000;
 
-        camera.position.x = 0;
+        mouseX += (mouseXTarget - mouseX) * 0.002;
+        camera.position.x = mouseX * 60;
         camera.position.y = 0;
         camera.position.z = -cloudPosition + 8000;
         renderer.render(scene, camera);

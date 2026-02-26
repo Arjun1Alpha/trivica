@@ -54,7 +54,7 @@
         width: 100%;
         height: 100%;
         transform-style: preserve-3d;
-        transform: translateY(0) rotateX(0) rotateY(0);
+        transform: translateY(0) translateZ(0) rotateX(0) rotateY(0);
       }
       .hero-text-scene.scrub-fly {
         transition: none;
@@ -81,10 +81,10 @@
       }
       @keyframes camera-enter-o {
         0% {
-          transform: scale(2.2);
+          transform: translateZ(-320px) scale(2.2);
         }
         100% {
-          transform: scale(1);
+          transform: translateZ(0) scale(1);
         }
       }
       .portal-o {
@@ -387,12 +387,12 @@
         var textEls = document.querySelectorAll(".hero-text-wrap .hero-text");
         var step = 1600;
         var idx = 0;
-        var scrollThreshold = 4;
+        var scrollThreshold = 50;
         var touchStartY = 0;
         var zIndexCurrent = 20;
         var zIndexOther = 0;
 
-        var SCRUB_RANGE = 420;
+        var SCRUB_RANGE = 380;
         var scrubTo = null;
         var scrubState = { progress: 0 };
         var scrubTween = null;
@@ -405,7 +405,6 @@
         ];
 
         window.cloudSpeedBoost = 1;
-        var cameraEnterPlayed = false;
 
         function updateTransforms() {
           for (var i = 0; i < textEls.length; i++) {
@@ -422,27 +421,22 @@
           }
           if (enterWrap) {
             if (idx === 0) {
-              if (!cameraEnterPlayed) {
-                cameraEnterPlayed = true;
-                function setOriginFromO() {
-                  if (portalO && enterWrap) {
-                    var wr = enterWrap.getBoundingClientRect();
-                    var sr = portalO.getBoundingClientRect();
-                    var ox = sr.left - wr.left + sr.width / 2;
-                    var oy = sr.top - wr.top + sr.height / 2;
-                    enterWrap.style.transformOrigin = ox + "px " + oy + "px";
-                  }
+              function setOriginFromO() {
+                if (portalO && enterWrap) {
+                  var wr = enterWrap.getBoundingClientRect();
+                  var sr = portalO.getBoundingClientRect();
+                  var ox = sr.left - wr.left + sr.width / 2;
+                  var oy = sr.top - wr.top + sr.height / 2;
+                  enterWrap.style.transformOrigin = ox + "px " + oy + "px";
                 }
-                setOriginFromO();
-                requestAnimationFrame(function () {
-                  setOriginFromO();
-                  enterWrap.classList.remove("camera-enter");
-                  enterWrap.offsetHeight;
-                  enterWrap.classList.add("camera-enter");
-                });
-              } else {
-                enterWrap.classList.remove("camera-enter");
               }
+              setOriginFromO();
+              requestAnimationFrame(function () {
+                setOriginFromO();
+                enterWrap.classList.remove("camera-enter");
+                enterWrap.offsetHeight;
+                enterWrap.classList.add("camera-enter");
+              });
             } else {
               enterWrap.classList.remove("camera-enter");
             }
@@ -455,21 +449,10 @@
         }
 
         function scrubApply(progress) {
-          if (scrubTo === null) return;
-          var fromIdx = idx;
-          var toIdx = scrubTo;
-          if (fromIdx === toIdx) {
-            scrubTo = null;
-            updateTransforms();
-            return;
-          }
-
-          var dir = toIdx > fromIdx ? 1 : -1;
-          // u हमेशा 0 → 1 जाता है, चाहे scroll down हो या up
-          var u = dir > 0 ? progress : 1 - progress;
-
+          var fromIdx = scrubTo > idx ? idx : scrubTo;
+          var toIdx = scrubTo > idx ? scrubTo : idx;
           var peak = flyPeaks[scrubVariant - 1];
-          var t = flyAmount(u);
+          var t = flyAmount(progress);
           var ty = peak.ty * t;
           var tz = peak.tz * t;
           var rx = peak.rx * t;
@@ -479,23 +462,22 @@
             sceneEl.style.transform =
               "translateY(" + ty + "px) translateZ(" + tz + "px) rotateX(" + rx + "deg) rotateY(" + ry + "deg)";
           }
-
-          // दो स्टेट्स के बीच लाइनियर इंटरपोलेशन:
-          // A: current idx, B: target scrubTo
-          var fromZ = u * dir * step;          // 0 → ±step
-          var toZ = -(1 - u) * dir * step;     // ∓step → 0
-          var fromScale = 1 - u;               // 1 → 0
-          var toScale = u;                     // 0 → 1
-
-          var fromZi, toZi;
-          if (u < 0.5) {
-            fromZi = zIndexCurrent;
-            toZi = zIndexOther;
+          var fromZ, fromScale, toZ, toScale, fromZi, toZi;
+          if (scrubTo > idx) {
+            fromZ = progress * step;
+            fromScale = 1 - progress;
+            toZ = -(1 - progress) * step;
+            toScale = progress;
+            fromZi = progress > 0.5 ? zIndexOther : zIndexCurrent;
+            toZi = progress > 0.5 ? zIndexCurrent : zIndexOther;
           } else {
-            fromZi = zIndexOther;
-            toZi = zIndexCurrent;
+            fromZ = (progress - 1) * step;
+            fromScale = progress;
+            toZ = progress * step;
+            toScale = 1 - progress;
+            fromZi = progress < 0.5 ? zIndexCurrent : zIndexOther;
+            toZi = progress < 0.5 ? zIndexOther : zIndexCurrent;
           }
-
           for (var i = 0; i < textEls.length; i++) {
             if (i === fromIdx) {
               textEls[i].style.transform =
@@ -508,9 +490,7 @@
               textEls[i].style.zIndex = toZi;
               textEls[i].style.opacity = String(toScale);
             } else {
-              var baseZ = (idx - i) * step;
-              textEls[i].style.transform =
-                "translate(-50%, -50%) translateZ(" + baseZ + "px) scale(0)";
+              textEls[i].style.transform = "translate(-50%, -50%) translateZ(0px) scale(0)";
               textEls[i].style.zIndex = zIndexOther;
               textEls[i].style.opacity = "0";
             }
@@ -518,11 +498,9 @@
         }
 
         function commitScrub() {
-          if (scrubTo === null) return;
-          var newIdx = scrubTo;
+          idx = scrubTo;
           scrubTo = null;
           scrubTween = null;
-          idx = newIdx;
           if (sceneEl) {
             sceneEl.classList.remove("scrub-fly");
             sceneEl.style.transform = "";
@@ -535,7 +513,6 @@
         }
 
         function cancelScrub() {
-          if (scrubTo === null) return;
           scrubTo = null;
           scrubTween = null;
           if (sceneEl) {
@@ -549,30 +526,25 @@
 
         function applyScrollDelta(dy) {
           if (scrubTo !== null) {
-            var deltaUnit = dy / SCRUB_RANGE;
-            if (deltaUnit > 0.4) deltaUnit = 0.4;
-            if (deltaUnit < -0.4) deltaUnit = -0.4;
-            var target = scrubState.progress + deltaUnit;
+            var target = scrubState.progress + dy / SCRUB_RANGE;
             target = Math.max(0, Math.min(1, target));
             if (scrubTween) scrubTween.kill();
             scrubTween = gsap.to(scrubState, {
               progress: target,
-              duration: 0.22,
-              ease: "power1.out",
+              duration: 0.4,
+              ease: "power2.out",
               onUpdate: function () {
-                var p = scrubState.progress;
-                scrubApply(p);
-                if (scrubTo === null) return;
-                if (scrubTo > idx && p >= 0.998) {
+                scrubApply(scrubState.progress);
+                if (scrubTo > idx && scrubState.progress >= 1) {
                   if (scrubTween) scrubTween.kill();
                   commitScrub();
-                } else if (scrubTo < idx && p <= 0.002) {
+                } else if (scrubTo < idx && scrubState.progress <= 0) {
                   if (scrubTween) scrubTween.kill();
                   commitScrub();
-                } else if (scrubTo > idx && p <= 0.002) {
+                } else if (scrubTo > idx && scrubState.progress <= 0) {
                   if (scrubTween) scrubTween.kill();
                   cancelScrub();
-                } else if (scrubTo < idx && p >= 0.998) {
+                } else if (scrubTo < idx && scrubState.progress >= 1) {
                   if (scrubTween) scrubTween.kill();
                   cancelScrub();
                 }
@@ -661,6 +633,8 @@
       var mesh, geometry, material;
 
       var start_time = Date.now();
+      var mouseX = 0;
+      var mouseXTarget = 0;
       var cloudPosition = 0;
       var lastCloudTime = Date.now();
       var cloudBoostCurrent = 1;
@@ -755,6 +729,11 @@
         container.appendChild(blueOverlay);
 
         window.addEventListener("resize", onWindowResize, false);
+        window.addEventListener("mousemove", onMouseMove, false);
+      }
+
+      function onMouseMove(event) {
+        mouseXTarget = (event.clientX / window.innerWidth) * 2 - 1;
       }
 
       function updateBgGradient() {
@@ -787,7 +766,8 @@
         cloudPosition = cloudPosition + speed * delta;
         cloudPosition = ((cloudPosition % 8000) + 8000) % 8000;
 
-        camera.position.x = 0;
+        mouseX += (mouseXTarget - mouseX) * 0.002;
+        camera.position.x = mouseX * 60;
         camera.position.y = 0;
         camera.position.z = -cloudPosition + 8000;
         renderer.render(scene, camera);
