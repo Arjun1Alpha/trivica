@@ -661,6 +661,8 @@
       var mesh, geometry, material;
 
       var start_time = Date.now();
+      var mouseX = 0;
+      var mouseXTarget = 0;
       var cloudPosition = 0;
       var lastCloudTime = Date.now();
       var cloudBoostCurrent = 1;
@@ -755,6 +757,12 @@
         container.appendChild(blueOverlay);
 
         window.addEventListener("resize", onWindowResize, false);
+        window.addEventListener("mousemove", onMouseMove, false);
+
+      }
+
+      function onMouseMove(event) {
+        mouseXTarget = (event.clientX / window.innerWidth) * 2 - 1;
       }
 
       function updateBgGradient() {
@@ -787,7 +795,8 @@
         cloudPosition = cloudPosition + speed * delta;
         cloudPosition = ((cloudPosition % 8000) + 8000) % 8000;
 
-        camera.position.x = 0;
+        mouseX += (mouseXTarget - mouseX) * 0.002;
+        camera.position.x = mouseX * 60;
         camera.position.y = 0;
         camera.position.z = -cloudPosition + 8000;
         renderer.render(scene, camera);
