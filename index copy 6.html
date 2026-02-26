@@ -408,10 +408,10 @@
         var textEls = document.querySelectorAll(".hero-text-wrap .hero-text");
         var step = 1600;
         var idx = 0;
-        var scrollThreshold = 10;
+        var scrollThreshold = 50;
         var touchStartY = 0;
         var debounce = false;
-        var transitionDuration = 2800;
+        var transitionDuration = 1500;
         var zIndexCurrent = 20;
         var zIndexOther = 0;
 
@@ -469,7 +469,7 @@
           nextIdx = Math.max(0, Math.min(nextIdx, textEls.length - 1));
           if (nextIdx === idx) return;
           debounce = true;
-          window.cloudSpeedBoost = nextIdx > idx ? 3 : -3;
+          window.cloudSpeedBoost = nextIdx > idx ? 5 : -5;
           idx = nextIdx;
           if (sceneEl) {
             var flyClasses = ["fly-turn-1", "fly-turn-2", "fly-turn-3", "fly-turn-4"];

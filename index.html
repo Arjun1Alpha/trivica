@@ -557,8 +557,8 @@
             if (scrubTween) scrubTween.kill();
             scrubTween = gsap.to(scrubState, {
               progress: target,
-              duration: 0.22,
-              ease: "power1.out",
+              duration: 0.48,
+              ease: "power2.out",
               onUpdate: function () {
                 var p = scrubState.progress;
                 scrubApply(p);
