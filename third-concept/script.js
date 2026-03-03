@@ -204,7 +204,7 @@ const displacementSlider = function(opts) {
             mat.uniforms.nextImage.value = sliderImages[slideId];
             mat.uniforms.nextImage.needsUpdate = true;
 
-            const duration = 3.2;
+            const duration = 5.5;
 
             TweenLite.to( mat.uniforms.dispFactor, duration, {
                 value: 1,
@@ -301,7 +301,7 @@ const displacementSlider = function(opts) {
 
         // Rotate cube slowly so it feels alive
         if (cubeModel) {
-            cubeModel.rotation.y += 0.01;
+            cubeModel.rotation.y += 0.003;
         }
 
         renderer.render(scene, camera);
