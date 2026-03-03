@@ -48,7 +48,24 @@ const displacementSlider = function(opts) {
 
             // Texture on the effect: fine grain on the reveal edge so transition isn't too clean/light
             float edgeGrain = (rand(uv * 220.0) - 0.5) * 0.12 + (rand(uv * 470.0 + 0.5) - 0.5) * 0.06;
-            reveal += edgeGrain;
+
+            // Small triangle shapes, only influencing the transition edge (not the images)
+            float triScale = 30.0;
+            vec2 gridUV = uv * triScale;
+            vec2 cellId = floor(gridUV);
+            vec2 local = fract(gridUV);
+
+            // Two triangle orientations inside each cell
+            float tri1 = step(local.x + local.y, 1.0);
+            float tri2 = step((1.0 - local.x) + local.y, 1.0);
+
+            // Randomly pick orientation per cell, then remap 0..1 -> -1..1
+            float triMix = step(0.5, rand(cellId));
+            float triShape = mix(tri1, tri2, triMix) * 2.0 - 1.5;
+
+            // Combine edge grain and small triangles into the reveal threshold
+            float triAmp = 0.02;
+            reveal += edgeGrain * 0.8 + triShape * triAmp;
 
             // Wider soft edge for a smoother, slower-feeling blend
             float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
@@ -103,6 +120,17 @@ const displacementSlider = function(opts) {
     camera.position.set(0, 0, 1);
     camera.lookAt(0, 0, -100);
 
+    // Center cube model (cube.glb) in front of slider
+    let cubeModel = null;
+
+    // Basic lighting so the model is visible
+    let ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+    scene.add(ambientLight);
+
+    let dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(1, 1, 1);
+    scene.add(dirLight);
+
     let mat = new THREE.ShaderMaterial({
         uniforms: {
             dispFactor:   { type: "f", value: 0.0 },
@@ -122,8 +150,36 @@ const displacementSlider = function(opts) {
         1
     );
     let object = new THREE.Mesh(geometry, mat);
-    object.position.set(0, 0, 0);
+    object.position.set(0, 0, -10);  // slider plane behind so cube can show on top
     scene.add(object);
+
+    // Load and center cube.glb model
+    let gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.load('cube.glb', function(gltf) {
+        cubeModel = gltf.scene;
+
+        // Compute bounding box to scale model to ~25% of the shortest screen dimension
+        let box = new THREE.Box3().setFromObject(cubeModel);
+        let size = new THREE.Vector3();
+        box.getSize(size);
+        let maxDim = Math.max(size.x, size.y, size.z);
+        if (maxDim > 0.0) {
+            let target = Math.min(parent.offsetWidth, parent.offsetHeight) * 0.25;
+            let scale = target / maxDim;
+            cubeModel.scale.set(scale, scale, scale);
+        }
+
+        // Recenter model so its bounding box center is at the origin
+        let center = new THREE.Vector3();
+        box.getCenter(center);
+        cubeModel.position.sub(center);
+
+        // Move to screen center, slightly in front of slider
+        cubeModel.position.z = 0;
+        cubeModel.renderOrder = 1;  // draw after slider so cube appears on top
+
+        scene.add(cubeModel);
+    });
 
     let addEvents = function(){
 
@@ -242,6 +298,12 @@ const displacementSlider = function(opts) {
 
     let animate = function() {
         requestAnimationFrame(animate);
+
+        // Rotate cube slowly so it feels alive
+        if (cubeModel) {
+            cubeModel.rotation.y += 0.01;
+        }
+
         renderer.render(scene, camera);
     };
     animate();
