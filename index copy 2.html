@@ -1,0 +1,592 @@
+
+<!DOCTYPE HTML>
+<html lang="en">
+	<head>
+		<title>TRIBECA — Beyond the Skyline</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style type="text/css">
+           @font-face {
+                font-family: 'fino-sans';
+                src: url('./fino-sans-regular/Fino-Sans.otf') format('opentype');
+            }
+
+			body {
+				background: linear-gradient(180deg, #87CEEB 0%, #a8d4e8 18%, #e8c4b8 38%, #f0b898 52%, #f5d4a8 68%, #e8a878 82%, #c08868 100%);
+				background-attachment: fixed;
+				margin: 0px;
+				overflow: hidden;
+				font-size: 13px;
+				text-align: center;
+				font-weight: bold;
+				font-family: 'fino-sans', sans-serif;
+			}
+
+			a {
+				color:#e88c5a;
+			}
+
+			.hero-text-wrap {
+				position: fixed;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				z-index: 10;
+				pointer-events: none;
+				width: 80%;
+				min-height: 120px;
+				perspective: 800px;
+				perspective-origin: 50% 50%;
+			}
+
+			.hero-text-scene {
+				position: absolute;
+				left: 0;
+				top: 0;
+				width: 100%;
+				height: 100%;
+				transform-style: preserve-3d;
+			}
+
+			.hero-text {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform-style: preserve-3d;
+				font-family: "fino-sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+				font-size: clamp(2.5rem, 1.75rem + 3.75vw, 6.25rem);
+				font-weight: 300;
+				color: rgba(255, 255, 255, 0.95);
+				text-align: center;
+				letter-spacing: 0.02em;
+				text-shadow: 0 2px 24px rgba(0, 0, 0, 0.25);
+				white-space: nowrap;
+				backface-visibility: hidden;
+				transition: transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s ease;
+				will-change: transform;
+			}
+
+			.sun-glow {
+				position: fixed;
+				left: 55%;
+				bottom: 8%;
+				width: 28vmin;
+				height: 28vmin;
+				transform: translate(-50%, 50%);
+				background: radial-gradient(circle at center,
+					#fff8e0 0%, #ffd966 12%, #f5b042 25%, #e8923a 45%, rgba(232, 146, 58, 0.6) 65%, rgba(232, 146, 58, 0.2) 85%, transparent 100%);
+				border-radius: 50%;
+				z-index: 0;
+				pointer-events: none;
+			}
+
+			/* Loading screen – minimalist like reference */
+			#loadingScreen {
+				position: fixed;
+				inset: 0;
+				background: transparent;
+				z-index: 100;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				overflow: hidden;
+				transition: opacity 0.6s ease;
+			}
+			#loadingScreen.hidden {
+				opacity: 0;
+				pointer-events: none;
+			}
+			.loading-upper {
+				flex: 1;
+				display: flex;
+				align-items: flex-end;
+				justify-content: center;
+				padding-bottom: 0.5rem;
+				min-height: 0;
+			}
+			.loading-percent {
+				font-family: "fino-sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+				font-size: clamp(2rem, 6vw, 3.5rem);
+				font-weight: 300;
+				color: #b5a99c;
+				letter-spacing: 0.02em;
+			}
+			.loading-panel {
+				position: absolute;
+				left: 0;
+				width: 100%;
+				background: #fafaf8;
+				pointer-events: none;
+				z-index: 0;
+			}
+			.loading-content {
+				position: relative;
+				z-index: 1;
+				width: 100%;
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				align-items: center;
+				min-height: 100%;
+				pointer-events: none;
+				transition: opacity 0.4s ease;
+			}
+			#loadingScreen.content-hidden .loading-content {
+				opacity: 0;
+				pointer-events: none;
+			}
+			.loading-panel-top {
+				top: 0;
+				height: 50vh;
+				transform: translateY(0);
+				transition: transform 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+			}
+			.loading-panel-bottom {
+				bottom: 0;
+				height: 50vh;
+				transform: translateY(0);
+				transition: transform 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+			}
+			#loadingScreen.gate-open .loading-panel-top {
+				transform: translateY(-100%);
+			}
+			#loadingScreen.gate-open .loading-panel-bottom {
+				transform: translateY(100%);
+			}
+			.loading-line-wrap {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				width: 72%;
+				max-width: 360px;
+				height: 2px;
+			}
+			.loading-line-progress {
+				position: absolute;
+				left: 0;
+				top: 50%;
+				margin-top: -1px;
+				width: 100%;
+				height: 1px;
+				background: #c4b8ab;
+				transform-origin: center;
+				transform: scaleX(0);
+				transition: transform 0.08s ease-out, opacity 0.2s ease;
+			}
+			#loadingScreen.gate-open .loading-line-progress {
+				opacity: 0;
+			}
+			.gate-line {
+				position: absolute;
+				left: 0;
+				width: 100%;
+				height: 1px;
+				background: #c4b8ab;
+				top: 50%;
+				margin-top: -1px;
+				opacity: 0;
+				pointer-events: none;
+				transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+			}
+			#loadingScreen.gate-open .gate-line-top {
+				opacity: 1;
+				transform: translateY(-50vh);
+			}
+			#loadingScreen.gate-open .gate-line-bottom {
+				opacity: 1;
+				transform: translateY(50vh);
+			}
+			.loading-lower {
+				flex: 1;
+				display: flex;
+				align-items: flex-start;
+				justify-content: center;
+				padding-top: 0.5rem;
+				min-height: 0;
+			}
+			.loading-label {
+				font-family: "fino-sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+				font-size: 0.7rem;
+				font-weight: 400;
+				letter-spacing: 0.28em;
+				color: #b5a99c;
+			}
+			.loading-progress-track {
+				width: 100%;
+				height: 2px;
+				/* background: rgba(196, 184, 171, 0.25); */
+				margin: 0.5rem 0;
+				overflow: hidden;
+			}
+			.loading-progress-fill {
+				height: 100%;
+				width: 100%;
+				transform-origin: left;
+				transform: scaleX(0);
+				transition: transform 0.08s ease-out;
+				background: #c4b8ab;
+			}
+
+		</style>
+	</head>
+	<body>
+
+		<div id="loadingScreen">
+			<div class="loading-panel loading-panel-top" aria-hidden="true"></div>
+			<div class="loading-panel loading-panel-bottom" aria-hidden="true"></div>
+			<div class="loading-content">
+				<div class="loading-upper">
+					<span class="loading-percent" id="loadingPercent">0%</span>
+				</div>
+				<div class="loading-progress-track">
+					<div class="loading-progress-fill" id="loadingProgressFill"></div>
+				</div>
+				<div class="loading-lower">
+					<span class="loading-label">LOADING</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="sun-glow" aria-hidden="true"></div>
+		<div class="hero-text-wrap" aria-live="polite">
+			<div class="hero-text-scene" id="heroTextScene">
+				<div class="hero-text" data-index="0">Beyond the Skyline.</div>
+				<div class="hero-text" data-index="1">Rare by Nature.</div>
+				<div class="hero-text" data-index="2">Designed to Outlast.</div>
+				<div class="hero-text" data-index="3">Built for Eternity.</div>
+				<div class="hero-text" data-index="4">This is TRIBECA</div>
+			</div>
+		</div>
+
+		<script type="text/javascript">
+			(function () {
+				var el = document.getElementById('loadingPercent');
+				var progressFill = document.getElementById('loadingProgressFill');
+				var screen = document.getElementById('loadingScreen');
+				var duration = 2200;
+				var gateDuration = 1100;
+				var contentHideDuration = 400;
+				var start = Date.now();
+				var gateStarted = false;
+				window.loadingContentReady = false;
+				var jumpAt = 120;
+				var randomStart = Math.floor(25 + Math.random() * 55);
+
+				function tick() {
+					var elapsed = Date.now() - start;
+					var p;
+					if (elapsed < jumpAt) {
+						p = 0;
+					} else {
+						var smoothElapsed = elapsed - jumpAt;
+						var smoothDuration = duration - jumpAt;
+						p = randomStart + (100 - randomStart) * Math.min(1, smoothElapsed / smoothDuration);
+					}
+					p = Math.min(100, p);
+					var pFloor = Math.floor(p);
+					if (el) el.textContent = pFloor + '%';
+					if (progressFill) progressFill.style.transform = 'scaleX(' + (p / 100) + ')';
+					if (p >= 100 && !gateStarted) {
+						gateStarted = true;
+						openGate();
+					} else if (p < 100) {
+						requestAnimationFrame(tick);
+					}
+				}
+				requestAnimationFrame(tick);
+
+				function openGate() {
+					if (!screen) return;
+					screen.classList.add('content-hidden');
+					setTimeout(function () {
+						screen.classList.add('gate-open');
+						setTimeout(hideLoading, gateDuration + 80);
+					}, contentHideDuration);
+				}
+
+				function hideLoading() {
+					if (!screen || screen.classList.contains('hidden')) return;
+					screen.classList.add('hidden');
+					setTimeout(function () {
+						if (screen.parentNode) screen.parentNode.removeChild(screen);
+					}, 650);
+				}
+
+				function tryHide() {
+					var elapsed = Date.now() - start;
+					if (gateStarted) return;
+					if (window.loadingContentReady && elapsed >= duration) {
+						if (!gateStarted) { gateStarted = true; openGate(); }
+					} else if (elapsed >= 3200) {
+						if (!gateStarted) { gateStarted = true; openGate(); }
+					}
+				}
+				setInterval(tryHide, 100);
+			})();
+		</script>
+
+		<script type="text/javascript">
+			(function () {
+				var sceneEl = document.getElementById('heroTextScene');
+				var textEls = document.querySelectorAll('.hero-text-wrap .hero-text');
+				var step = 1000;
+				var idx = 0;
+				var scrollThreshold = 50;
+				var touchStartY = 0;
+				var debounce = false;
+				var transitionDuration = 700;
+				var zIndexCurrent = 20;
+				var zIndexOther = 0;
+
+				/*
+				 * On each scroll (one line change):
+				 * - z-index: only the current line has zIndexCurrent (20), others have zIndexOther (0).
+				 *   So when you scroll, the line that becomes current goes 0 -> 20, the previous current goes 20 -> 0.
+				 * - translateZ (3D depth): z = (idx - i) * step.
+				 *   Current line: z = 0. Next line: z = -step (-280px). Previous: z = +step (+280px).
+				 *   So per scroll, each line's translateZ changes by step (280px) in the right direction.
+				 */
+
+				window.cloudSpeedBoost = 1;
+
+				function updateTransforms() {
+					for (var i = 0; i < textEls.length; i++) {
+						var z = (idx - i) * step;
+						textEls[i].style.transform = 'translate(-50%, -50%) translateZ(' + z + 'px)';
+						textEls[i].style.zIndex = (i === idx) ? zIndexCurrent : zIndexOther;
+						textEls[i].style.opacity = (i === idx) ? '1' : '0.4';
+					}
+				}
+				updateTransforms();
+
+				function goToLine(nextIdx) {
+					if (debounce) return;
+					nextIdx = Math.max(0, Math.min(nextIdx, textEls.length - 1));
+					if (nextIdx === idx) return;
+					debounce = true;
+					window.cloudSpeedBoost = 1;
+					idx = nextIdx;
+					updateTransforms();
+					setTimeout(function () {
+						debounce = false;
+						window.cloudSpeedBoost = 1;
+					}, transitionDuration + 50);
+				}
+
+				function onScroll(e) {
+					var dy = e.deltaY || 0;
+					if (Math.abs(dy) < scrollThreshold) return;
+					if (dy > 0) goToLine(idx + 1);
+					else goToLine(idx - 1);
+				}
+
+				function onTouchStart(e) {
+					touchStartY = e.touches[0].clientY;
+				}
+
+				function onTouchEnd(e) {
+					var touchEndY = e.changedTouches[0].clientY;
+					var dy = touchEndY - touchStartY;
+					if (Math.abs(dy) < scrollThreshold) return;
+					if (dy > 0) goToLine(idx - 1);
+					else goToLine(idx + 1);
+				}
+
+				window.addEventListener('wheel', onScroll, { passive: true });
+				window.addEventListener('touchstart', onTouchStart, { passive: true });
+				window.addEventListener('touchend', onTouchEnd, { passive: true });
+			})();
+		</script>
+
+		<script type="text/javascript" src="js/three.min.js"></script>
+		<script type="text/javascript" src="js/Detector.js"></script>
+
+		<script id="vs" type="x-shader/x-vertex">
+
+			varying vec2 vUv;
+
+			void main() {
+
+				vUv = uv;
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+			}
+
+		</script>
+
+		<script id="fs" type="x-shader/x-fragment">
+
+			uniform sampler2D map;
+
+			uniform vec3 fogColor;
+			uniform float fogNear;
+			uniform float fogFar;
+
+			varying vec2 vUv;
+
+			void main() {
+
+				float depth = gl_FragCoord.z / gl_FragCoord.w;
+				float fogFactor = smoothstep( fogNear, fogFar, depth );
+
+				gl_FragColor = texture2D( map, vUv );
+				// tint grey parts toward light blue, keep white white
+				float lum = dot( gl_FragColor.rgb, vec3( 0.599, 0.587, 0.114 ) );
+				vec3 blueTint = vec3( 0.65, 0.82, 0.95 );
+				gl_FragColor.rgb = gl_FragColor.rgb + ( 1.0 - lum ) * ( blueTint - gl_FragColor.rgb ) * 0.7;
+				gl_FragColor.w *= pow( gl_FragCoord.z, 20.0 );
+				gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor );
+
+			}
+
+		</script>
+
+		<script type="text/javascript">
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container;
+			var camera, scene, renderer;
+			var mesh, geometry, material;
+
+			var start_time = Date.now();
+			var mouseX = 0;
+			var mouseXTarget = 0;
+			var cloudPosition = 0;
+			var lastCloudTime = Date.now();
+			var cloudBoostCurrent = 1;
+
+			init();
+
+			function init() {
+
+				container = document.createElement( 'div' );
+				container.style.position = 'relative';
+				container.style.zIndex = '1';
+				document.body.appendChild( container );
+
+				// Bg gradient (reused on resize)
+				updateBgGradient();
+
+				//
+
+				camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 3000 );
+				camera.position.z = 8000;
+
+				scene = new THREE.Scene();
+
+				geometry = new THREE.Geometry();
+
+				var texture = THREE.ImageUtils.loadTexture( 'cloud10.png', null, function () {
+					window.loadingContentReady = true;
+					animate();
+				}, function () {
+					var el = document.createElement( 'div' );
+					el.style.cssText = 'padding:1em;text-align:center;background:#eee;color:#000;font-family:monospace;';
+					el.textContent = 'Cloud texture (cloud10.png) failed to load.';
+					document.body.appendChild( el );
+				} );
+				texture.magFilter = THREE.LinearMipMapLinearFilter;
+				texture.minFilter = THREE.LinearMipMapLinearFilter;
+
+				var fog = new THREE.Fog( 0xa8d4e8, - 100, 3000 );
+
+				material = new THREE.ShaderMaterial( {
+
+					uniforms: {
+
+						"map": { type: "t", value: texture },
+						"fogColor" : { type: "c", value: fog.color },
+						"fogNear" : { type: "f", value: fog.near },
+						"fogFar" : { type: "f", value: fog.far },
+
+					},
+					vertexShader: document.getElementById( 'vs' ).textContent,
+					fragmentShader: document.getElementById( 'fs' ).textContent,
+					depthWrite: false,
+					depthTest: false,
+					transparent: true
+
+				} );
+
+				var plane = new THREE.Mesh( new THREE.PlaneGeometry( 64, 64 ) );
+
+				for ( var i = 0; i < 8000; i++ ) {
+
+					plane.position.x = Math.random() * 1000 - 500;
+					plane.position.y = - Math.random() * Math.random() * 400 - 15;
+					plane.position.z = i;
+					plane.rotation.z = Math.random() * Math.PI;
+					plane.scale.x = plane.scale.y = Math.random() * Math.random() * 1.5 + 0.5;
+
+					THREE.GeometryUtils.merge( geometry, plane );
+
+				}
+
+				mesh = new THREE.Mesh( geometry, material );
+				scene.add( mesh );
+
+				mesh = new THREE.Mesh( geometry, material );
+				mesh.position.z = - 8000;
+				scene.add( mesh );
+
+				renderer = new THREE.WebGLRenderer( { antialias: false } );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				var blueOverlay = document.createElement( 'div' );
+				blueOverlay.setAttribute( 'aria-hidden', 'true' );
+				// blueOverlay.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:2;' +
+				// 	'background:linear-gradient(180deg, rgba(90,150,220,0.32) 0%, rgba(120,180,230,0.18) 25%, rgba(150,200,240,0.06) 55%, transparent 75%);';
+				container.appendChild( blueOverlay );
+
+				window.addEventListener( 'resize', onWindowResize, false );
+				window.addEventListener( 'mousemove', onMouseMove, false );
+
+			}
+
+			function onMouseMove( event ) {
+				mouseXTarget = ( event.clientX / window.innerWidth ) * 2 - 1;
+			}
+
+			function updateBgGradient() {
+				container.style.background = 'url(HDR_AboveTheClouds.test.jpg) center center / cover no-repeat';
+				// container.style.background = 'linear-gradient(180deg, #87CEEB 0%, #a8d4e8 15%, #e8c4b8 35%, #f0b898 50%, #f5d4a8 65%, #e8a878 80%, #c08868 100%) center center / cover no-repeat';
+			}
+
+			function onWindowResize( event ) {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				updateBgGradient();
+
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				var now = Date.now();
+				var delta = now - lastCloudTime;
+				lastCloudTime = now;
+				var targetBoost = window.cloudSpeedBoost !== undefined ? window.cloudSpeedBoost : 1;
+				cloudBoostCurrent += ( targetBoost - cloudBoostCurrent ) * 0.58;
+				var speed = 0.03 * cloudBoostCurrent;
+				cloudPosition = ( cloudPosition + speed * delta ) % 8000;
+
+				mouseX += ( mouseXTarget - mouseX ) * 0.002;
+				camera.position.x = mouseX * 60;
+				camera.position.y = 0;
+				camera.position.z = - cloudPosition + 8000;
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+	</body>
+</html>
