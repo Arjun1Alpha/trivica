@@ -8,7 +8,7 @@ const displacementSlider = function(opts) {
         }
     `;
 
-    // Single transition: triangle from bottom center expanding to full screen
+    // 10 different transition patterns, selected by uniform effectIndex (0–9)
     let fragment = `
         
         varying vec2 vUv;
@@ -17,43 +17,97 @@ const displacementSlider = function(opts) {
         uniform sampler2D nextImage;
 
         uniform float dispFactor;
+        uniform float effectIndex;
+
+        float rand(vec2 co) {
+            return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+        }
 
         void main() {
 
             vec2 uv = vUv;
-
-            // Base textures
             vec4 fromTex = texture2D(currentImage, uv);
             vec4 toTex   = texture2D(nextImage, uv);
 
-            float t = clamp(dispFactor, 0.0, 1.0);
+            float t = smoothstep(0.0, 1.0, dispFactor);
+            float mask = 0.0;
 
-            // ---- Triangle mask (bottom-center, scaling 0 -> full screen) ----
-            // Scale factor (2x) so triangle grows faster/larger
-            float scale = max(t * 2.0, 0.001);
+            // 0: vertical wipe (left -> right)
+            if (effectIndex < 0.5) {
+                mask = step(uv.x, t);
+            }
+            // 1: horizontal wipe (top -> bottom)
+            else if (effectIndex < 1.5) {
+                mask = step(uv.y, t);
+            }
+            // 2: diagonal wipe (top-left -> bottom-right)
+            else if (effectIndex < 2.5) {
+                float d = (uv.x + uv.y) * 0.5;
+                mask = step(d, t);
+            }
+            // 3: radial circle from center
+            else if (effectIndex < 3.5) {
+                vec2 center = vec2(0.5);
+                float dist = distance(uv, center);
+                mask = step(dist, t * 1.5);
+            }
+            // 4: checkerboard squares
+            else if (effectIndex < 4.5) {
+                float tiles = 20.0;
+                vec2 cell = floor(uv * tiles);
+                float cb = mod(cell.x + cell.y, 2.0);
+                float threshold = t * 2.0;
+                mask = step(cb, threshold);
+            }
+            // 5: noise dissolve
+            else if (effectIndex < 5.5) {
+                float n = rand(uv * 100.0);
+                mask = step(n, t);
+            }
+            // 6: vertical blinds
+            else if (effectIndex < 6.5) {
+                float bands = 20.0;
+                float band = floor(uv.x * bands);
+                float phase = band / bands;
+                mask = step(uv.y, t * (1.0 + phase));
+            }
+            // 7: horizontal blinds
+            else if (effectIndex < 7.5) {
+                float bands = 20.0;
+                float band = floor(uv.y * bands);
+                float phase = band / bands;
+                mask = step(uv.x, t * (1.0 + phase));
+            }
+            // 8: small triangles
+            else if (effectIndex < 8.5) {
+                float tiles = 40.0;
+                vec2 scaled = uv * tiles;
+                vec2 cell   = floor(scaled);
+                vec2 local  = fract(scaled);
 
-            // Map to triangle space: x in [-1,1], y in [0,1]
-            vec2 triUV = vec2(uv.x * 2.0 - 1.0, uv.y);
+                float checker = mod(cell.x + cell.y, 2.0);
+                float edge;
+                if (checker < 0.5) {
+                    edge = local.x + local.y;
+                } else {
+                    edge = local.x + (1.0 - local.y);
+                }
 
-            // Shrink space towards bottom center when t is small
-            vec2 p = triUV / scale;
+                mask = step(edge, t * 2.0);
+            }
+            // 9: original water-like displacement
+            else {
+                float intensity = 0.3;
+                vec4 orig1 = texture2D(currentImage, uv);
+                vec4 orig2 = texture2D(nextImage, uv);
+                vec4 displacedFrom = texture2D(currentImage, vec2(uv.x, uv.y + dispFactor * (orig2.r * intensity)));
+                vec4 displacedTo   = texture2D(nextImage, vec2(uv.x, uv.y + (1.0 - dispFactor) * (orig1.r * intensity)));
+                vec4 finalTexture = mix(displacedFrom, displacedTo, dispFactor);
+                gl_FragColor = finalTexture;
+                return;
+            }
 
-            // Inside upright triangle with apex at (0,0) and base at y=1
-            // Conditions: y in [0,1] and |x| <= (1.0 - y)
-            float inY  = step(0.0, p.y) * step(p.y, 1.0);
-            float inX  = step(abs(p.x), 1.0 - p.y);
-            float triMask = clamp(inY * inX, 0.0, 1.0);
-
-            // ---- Liquid / water displacement for outside area ----
-            float intensity = 0.3;
-            vec4 orig1 = texture2D(currentImage, uv);
-            vec4 orig2 = texture2D(nextImage, uv);
-            vec4 displacedFrom = texture2D(currentImage, vec2(uv.x, uv.y + dispFactor * (orig2.r * intensity)));
-            vec4 displacedTo   = texture2D(nextImage, vec2(uv.x, uv.y + (1.0 - dispFactor) * (orig1.r * intensity)));
-            vec4 waterMix = mix(displacedFrom, displacedTo, t);
-
-            // Inside triangle = pure next image, outside = liquid mix
-            vec4 finalTexture = mix(waterMix, toTex, triMask);
+            vec4 finalTexture = mix(fromTex, toTex, clamp(mask, 0.0, 1.0));
             gl_FragColor = finalTexture;
 
         }
@@ -103,6 +157,7 @@ const displacementSlider = function(opts) {
     let mat = new THREE.ShaderMaterial({
         uniforms: {
             dispFactor:   { type: "f", value: 0.0 },
+            effectIndex:  { type: "f", value: 8.0 }, // default: small triangles
             currentImage: { type: "t", value: sliderImages[0] },
             nextImage:    { type: "t", value: sliderImages[1] },
         },
@@ -144,7 +199,7 @@ const displacementSlider = function(opts) {
             mat.uniforms.nextImage.value = sliderImages[slideId];
             mat.uniforms.nextImage.needsUpdate = true;
 
-            TweenLite.to( mat.uniforms.dispFactor, 1.5, {
+            TweenLite.to( mat.uniforms.dispFactor, 1, {
                 value: 1,
                 ease: 'Expo.easeInOut',
                 onComplete: function () {
@@ -196,6 +251,11 @@ const displacementSlider = function(opts) {
 
         // Keyboard: Arrow Left = previous, Arrow Right = next
         window.addEventListener('keydown', function(e) {
+            let n = parseInt(e.key, 10);
+            if (!isNaN(n) && n >= 0 && n <= 9 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                mat.uniforms.effectIndex.value = n;
+                return;
+            }
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 goToSlide(currentSlide - 1);
