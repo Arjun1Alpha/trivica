@@ -9,65 +9,93 @@ const displacementSlider = function(opts) {
     `;
 
     let fragment = `
-        
-        varying vec2 vUv;
+    varying vec2 vUv;
 
-        uniform sampler2D currentImage;
-        uniform sampler2D nextImage;
+    uniform sampler2D currentImage;
+    uniform sampler2D nextImage;
+    uniform float dispFactor;
 
-        uniform float dispFactor;
+    float rand(vec2 co) {
+        return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    }
 
-        float rand(vec2 co) {
-            return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        }
+    float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = rand(i);
+        float b = rand(i + vec2(1.0, 0.0));
+        float c = rand(i + vec2(0.0, 1.0));
+        float d = rand(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
 
-        float noise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            f = f * f * (3.0 - 2.0 * f);
-            float a = rand(i);
-            float b = rand(i + vec2(1.0, 0.0));
-            float c = rand(i + vec2(0.0, 1.0));
-            float d = rand(i + vec2(1.0, 1.0));
-            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-        }
+    // Signed distance to a line defined by two points
+    float lineDist(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a, ba = b - a;
+        float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        return length(pa - ba * h);
+    }
 
-        void main() {
+    // Returns 0.0 on a triangle edge, 1.0 away from it
+    float triangleGrid(vec2 uv, float scale, float lineWidth) {
+        vec2 g = uv * scale;
 
-            vec2 uv = vUv;
-            float t = smoothstep(0.0, 1.0, dispFactor);
+        // Aspect-correct pixel size for line width
+        float pw = lineWidth;
 
-            float n  = noise(uv * 4.0)  * 0.5;
-            n += noise(uv * 8.0)  * 0.25;
-            n += noise(uv * 16.0) * 0.125;
-            n += noise(uv * 32.0) * 0.0625;
-            float reveal = n;
+        vec2 cell  = floor(g);
+        vec2 local = fract(g);               // 0..1 inside each square cell
 
-            float edgeGrain = (rand(uv * 220.0) - 0.5) * 0.12 + (rand(uv * 470.0 + 0.5) - 0.5) * 0.06;
+        // Every cell contains two triangles:
+        //   upper-left  triangle: (0,0)→(1,0)→(0,1)  — upward pointing
+        //   lower-right triangle: (1,0)→(1,1)→(0,1)  — downward pointing
+        // We draw ALL six edges of both triangles so we get the full grid.
 
-            float triScale = 30.0;
-            vec2 gridUV = uv * triScale;
-            vec2 cellId = floor(gridUV);
-            vec2 local = fract(gridUV);
+        // --- edges of the upward triangle ---
+        float d = 1.0;
+        d = min(d, lineDist(local, vec2(0.0,0.0), vec2(1.0,0.0))); // bottom
+        d = min(d, lineDist(local, vec2(0.0,0.0), vec2(0.0,1.0))); // left
+        d = min(d, lineDist(local, vec2(1.0,0.0), vec2(0.0,1.0))); // hypotenuse
 
-            float tri1 = step(local.x + local.y, 1.0);
-            float tri2 = step((1.0 - local.x) + local.y, 1.0);
+        // --- edges of the downward triangle (shares hypotenuse) ---
+        d = min(d, lineDist(local, vec2(1.0,0.0), vec2(1.0,1.0))); // right
+        d = min(d, lineDist(local, vec2(0.0,1.0), vec2(1.0,1.0))); // top
 
-            float triMix = step(0.5, rand(cellId));
-            float triShape = mix(tri1, tri2, triMix) * 2.0 - 1.5;
+        // Smooth anti-aliased stroke
+        return 1.0 - smoothstep(pw * 0.5, pw * 1.5, d);
+    }
 
-            float triAmp = 0.02;
-            reveal += edgeGrain * 0.8 + triShape * triAmp;
+    void main() {
+        vec2 uv = vUv;
+        float t = smoothstep(0.0, 1.0, dispFactor);
 
-            float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
+        // ── noise-based reveal field (same as before) ──
+        float n  = noise(uv * 4.0)  * 0.5;
+        n += noise(uv * 8.0)  * 0.25;
+        n += noise(uv * 16.0) * 0.125;
+        n += noise(uv * 32.0) * 0.0625;
+        float reveal = n;
 
-            vec4 fromTex = texture2D(currentImage, uv);
-            vec4 toTex   = texture2D(nextImage, uv);
-            vec4 finalTexture = mix(fromTex, toTex, mask);
-            gl_FragColor = finalTexture;
+        float edgeGrain = (rand(uv * 220.0) - 0.5) * 0.12
+                        + (rand(uv * 470.0 + 0.5) - 0.5) * 0.06;
 
-        }
-    `;
+        // ── triangle grid overlay driving the mask ──
+        // scale ~30 gives roughly the same cell density as the image
+        float grid = triangleGrid(uv, 30.0, 0.03);
+
+        // Weave the grid into the reveal field so transition
+        // "wipes" along triangle edges
+        reveal += edgeGrain * 0.8 + grid * 0.06;
+
+        float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
+
+        vec4 fromTex     = texture2D(currentImage, uv);
+        vec4 toTex       = texture2D(nextImage,    uv);
+        vec4 finalTexture = mix(fromTex, toTex, mask);
+        gl_FragColor = finalTexture;
+    }
+`;
 
     let images = opts.images, image, sliderImages = [];
     let parent = opts.parent;
@@ -343,20 +371,48 @@ window.startChromeCubeSpin = function (durationMs) {
 };
 
 // Expose a helper so the slider can update the cube's reflections
-window.updateChromeEnvFromTexture = function (tex) {
+window.updateChromeEnvFromTexture = function (tex, envResolution) {
     if (!chromeScene || !chromePmremGenerator || !tex) return;
 
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.encoding = THREE.sRGBEncoding;
+    // envResolution controls the downscale — lower = blurrier/softer reflections
+    // e.g. 64, 128, 256 (default full-res is usually 1024+)
+    const res = envResolution || 1024;
 
-    const envRT = chromePmremGenerator.fromEquirectangular(tex);
-    const envMap = envRT.texture;
+    // Wait for the texture image to be ready before sampling it
+    function applyEnv(sourceImage) {
+        const canvas = document.createElement('canvas');
+        canvas.width  = res;
+        canvas.height = res;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sourceImage, 0, 0, res, res);
 
-    chromeScene.environment = envMap;
+        // Build a new THREE texture from the downscaled canvas
+        const smallTex = new THREE.CanvasTexture(canvas);
+        smallTex.mapping  = THREE.EquirectangularReflectionMapping;
+        smallTex.encoding = THREE.sRGBEncoding;
 
-    if (chromeCube && chromeCube.material) {
-        chromeCube.material.envMap = envMap;
-        chromeCube.material.needsUpdate = true;
+        const envRT  = chromePmremGenerator.fromEquirectangular(smallTex);
+        const envMap = envRT.texture;
+
+        chromeScene.environment = envMap;
+
+        if (chromeCube && chromeCube.material) {
+            chromeCube.material.envMap = envMap;
+            chromeCube.material.needsUpdate = true;
+        }
+
+        smallTex.dispose();
+    }
+
+    if (tex.image) {
+        applyEnv(tex.image);
+    } else {
+        const wait = setInterval(function () {
+            if (tex.image) {
+                clearInterval(wait);
+                applyEnv(tex.image);
+            }
+        }, 50);
     }
 };
 
@@ -386,11 +442,11 @@ function animateChromeCube() {
 
     if (chromeCube) {
         // Smoothly ease cube towards mouse‑driven tilt
-        chromeCube.rotation.x += (cubeMouseTargetX - chromeCube.rotation.x) * 0.06;
+        chromeCube.rotation.x += (cubeMouseTargetX - chromeCube.rotation.x) * 0.02;
 
         // Slow auto‑rotation around Y when not in a 360° spin
         if (!cubeSpinning) {
-            chromeCube.rotation.y += 0.003;
+            chromeCube.rotation.y += 0.002;
         }
     }
 
