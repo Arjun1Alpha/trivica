@@ -8,7 +8,6 @@ const displacementSlider = function(opts) {
         }
     `;
 
-    // Random places reveal: smooth noise per pixel, no center convergence
     let fragment = `
         
         varying vec2 vUv;
