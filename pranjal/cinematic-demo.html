@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinematic environment transition – demo</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: sans-serif;
+            overflow-x: hidden;
+            background: #0a0a0a;
+        }
+        /* Full-viewport canvas stays fixed; sections scroll over it */
+        #cinematic-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        #cinematic-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .section {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            pointer-events: none;
+        }
+        .section-content {
+            pointer-events: auto;
+            text-align: center;
+            color: rgba(255,255,255,0.9);
+            max-width: 480px;
+        }
+        .section-content h2 {
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+        .section-content p {
+            font-size: 0.95rem;
+            opacity: 0.85;
+            line-height: 1.5;
+        }
+        .section:first-of-type { padding-top: 20vh; }
+        .scroll-hint {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            color: rgba(255,255,255,0.6);
+            font-size: 12px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="cinematic-container"></div>
+
+    <section class="section" data-section="0" data-env="a">
+        <div class="section-content">
+            <h2>Scene A</h2>
+            <p>Warm environment. Scroll down to trigger the cinematic transition to Scene B.</p>
+        </div>
+    </section>
+    <section class="section" data-section="1" data-env="b">
+        <div class="section-content">
+            <h2>Scene B</h2>
+            <p>Cool environment. Scroll up to transition back to Scene A.</p>
+        </div>
+    </section>
+
+    <div class="scroll-hint" id="scroll-hint">Scroll to transition</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.20.4/TweenMax.min.js"></script>
+    <script src="cinematic-transition.js"></script>
+    <script>
+        // —— Scroll / section trigger: transition runs when crossing section boundary ——
+        (function () {
+            var container = document.getElementById('cinematic-container');
+            var cinematic = new CinematicTransition({
+                container: container,
+                transitionDuration: 1.5,
+                productType: 'torus',
+                onReady: function () {
+                    document.body.classList.remove('loading');
+                }
+            });
+
+            window.cinematicTransition = cinematic;
+
+            var sections = document.querySelectorAll('.section');
+            var lastSectionIndex = 0;
+            var transitionInProgress = false;
+
+            function getSectionFromScroll() {
+                var vh = window.innerHeight;
+                var scrollY = window.scrollY || window.pageYOffset;
+                var index = Math.round(scrollY / vh);
+                index = Math.max(0, Math.min(index, sections.length - 1));
+                return index;
+            }
+
+            function onScroll() {
+                var sectionIndex = getSectionFromScroll();
+                if (sectionIndex === lastSectionIndex || transitionInProgress) return;
+
+                transitionInProgress = true;
+                if (sectionIndex > lastSectionIndex) {
+                    cinematic.triggerTransition(function () {
+                        transitionInProgress = false;
+                        lastSectionIndex = sectionIndex;
+                    });
+                } else {
+                    cinematic.triggerTransitionBack(function () {
+                        transitionInProgress = false;
+                        lastSectionIndex = sectionIndex;
+                    });
+                }
+            }
+
+            window.addEventListener('scroll', function () {
+                requestAnimationFrame(onScroll);
+            }, { passive: true });
+
+            window.addEventListener('resize', function () {
+                cinematic.resize();
+            });
+        })();
+    </script>
+</body>
+</html>
