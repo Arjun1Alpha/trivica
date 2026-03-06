@@ -68,6 +68,9 @@ const displacementSlider = function(opts) {
 
     void main() {
         vec2 uv = vUv;
+        // Zoom background image around the center by 1.5x
+        float zoom = 0.8;
+        uv = (uv - 0.5) * zoom + 0.5;
         float t = smoothstep(0.0, 1.0, dispFactor);
 
         // ── noise-based reveal field (same as before) ──
@@ -313,6 +316,7 @@ const CUBE_TRANSITION_FRAGMENT = `
     uniform sampler2D pattern;
     uniform float dispFactor;
     uniform float patternMix;
+    uniform float reflectStrength;
     float rand(vec2 co) {
         return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
     }
@@ -345,6 +349,8 @@ const CUBE_TRANSITION_FRAGMENT = `
     }
     void main() {
         vec2 uv = vUv;
+
+        // Same triangle/noise transition as the slider
         float t = smoothstep(0.0, 1.0, dispFactor);
         float n  = noise(uv * 4.0)  * 0.5;
         n += noise(uv * 8.0)  * 0.25;
@@ -355,22 +361,18 @@ const CUBE_TRANSITION_FRAGMENT = `
         float grid = triangleGrid(uv, 30.0, 0.03);
         reveal += edgeGrain * 0.8 + grid * 0.06;
         float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
+
         vec4 fromTex = texture2D(currentImage, uv);
         vec4 toTex  = texture2D(nextImage, uv);
-        // Base slide color
-        vec4 baseColor = mix(fromTex, toTex, mask);
-        // Apply dark pattern first (so reflection can brighten on top)
+        vec4 finalColor = mix(fromTex, toTex, mask);
+
+        // Subtle dark pattern overlay only (no reflection)
         vec4 patternTex = texture2D(pattern, uv);
         float patternAlpha = patternTex.a > 0.01 ? patternTex.a : 0.0;
-        float darkFactor = patternMix * patternAlpha * 0.35;
-        baseColor.rgb = mix(baseColor.rgb, vec3(0.0), darkFactor);
-        // Stronger, tinted fresnel reflection
-        vec3 N = normalize(vNormal);
-        vec3 V = normalize(cameraPosition - vWorldPosition);
-        float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
-        vec3 envColor = vec3(0.85, 0.92, 1.0); // cool, bright "environment"
-        vec3 finalRgb = mix(baseColor.rgb, envColor, fresnel * 0.95);
-        gl_FragColor = vec4(finalRgb, baseColor.a);
+        float darkFactor = patternMix * patternAlpha * 0.18;
+        finalColor.rgb = mix(finalColor.rgb, vec3(0.0), darkFactor);
+
+        gl_FragColor = finalColor;
     }
 `;
 
@@ -429,7 +431,8 @@ function initChromeCube(sliderImages) {
             currentImage: { type: 't', value: firstTex },
             nextImage:    { type: 't', value: firstTex },
             pattern:      { type: 't', value: patternTex },
-            patternMix:   { type: 'f', value: 0.0 }
+            patternMix:   { type: 'f', value: 0.0 },
+            reflectStrength: { type: 'f', value: 0.0 }
         },
         vertexShader: CUBE_TRANSITION_VERTEX,
         fragmentShader: CUBE_TRANSITION_FRAGMENT,
@@ -467,9 +470,19 @@ window.rotateChromeCubeOnScroll = function (prevSlide, slideId, durationSeconds)
     if (!chromeCube || durationSeconds <= 0) return;
     var direction = slideId > prevSlide ? 1 : -1;
     var targetY = chromeCubeBase.y + direction * (Math.PI * 2);
+    // Enable strong reflection while the cube is rotating
+    if (chromeCube.material && chromeCube.material.uniforms && chromeCube.material.uniforms.reflectStrength) {
+        chromeCube.material.uniforms.reflectStrength.value = 1.0;
+    }
     TweenLite.to(chromeCubeBase, durationSeconds, {
         y: targetY,
-        ease: 'Power2.easeInOut'
+        ease: 'Power2.easeInOut',
+        onComplete: function () {
+            // When rotation stops, go back to pure image (no reflection)
+            if (chromeCube.material && chromeCube.material.uniforms && chromeCube.material.uniforms.reflectStrength) {
+                chromeCube.material.uniforms.reflectStrength.value = 0.0;
+            }
+        }
     });
 };
 
