@@ -124,7 +124,7 @@ function init() {
 
     const loader = new THREE.GLTFLoader();
     loader.load(
-        'mandalorian_helmet.glb',
+        'cube2.glb',
         function (gltf) {
             helmet = gltf.scene;
 
