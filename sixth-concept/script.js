@@ -179,6 +179,7 @@ const displacementSlider = function(opts) {
             if (slideId === currentSlide) return;
 
             isAnimating = true;
+            let prevSlide = currentSlide;
             currentSlide = slideId;
 
             const duration = 5.5;
@@ -192,9 +193,8 @@ const displacementSlider = function(opts) {
             if (window.updateChromeCubeTransition) {
                 window.updateChromeCubeTransition(sliderImages[slideId], duration);
             }
-
-            if (window.startChromeCubeSpin) {
-                window.startChromeCubeSpin(duration * 1000);
+            if (window.rotateChromeCubeOnScroll) {
+                window.rotateChromeCubeOnScroll(prevSlide, slideId, duration);
             }
 
             TweenLite.to( mat.uniforms.dispFactor, duration, {
@@ -291,19 +291,28 @@ const displacementSlider = function(opts) {
 };
 
 // ---- Chrome cube in its own canvas (second renderer) ----
-// Same WebGL transition shader as slider (noise + triangle grid reveal)
+// Same WebGL transition shader as slider (noise + triangle grid reveal) + fake reflection
 const CUBE_TRANSITION_VERTEX = `
     varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
     void main() {
         vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
 `;
 const CUBE_TRANSITION_FRAGMENT = `
     varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
     uniform sampler2D currentImage;
     uniform sampler2D nextImage;
+    uniform sampler2D pattern;
     uniform float dispFactor;
+    uniform float patternMix;
     float rand(vec2 co) {
         return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
     }
@@ -348,19 +357,31 @@ const CUBE_TRANSITION_FRAGMENT = `
         float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
         vec4 fromTex = texture2D(currentImage, uv);
         vec4 toTex  = texture2D(nextImage, uv);
-        gl_FragColor = mix(fromTex, toTex, mask);
+        // Base slide color
+        vec4 baseColor = mix(fromTex, toTex, mask);
+        // Apply dark pattern first (so reflection can brighten on top)
+        vec4 patternTex = texture2D(pattern, uv);
+        float patternAlpha = patternTex.a > 0.01 ? patternTex.a : 0.0;
+        float darkFactor = patternMix * patternAlpha * 0.35;
+        baseColor.rgb = mix(baseColor.rgb, vec3(0.0), darkFactor);
+        // Stronger, tinted fresnel reflection
+        vec3 N = normalize(vNormal);
+        vec3 V = normalize(cameraPosition - vWorldPosition);
+        float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+        vec3 envColor = vec3(0.85, 0.92, 1.0); // cool, bright "environment"
+        vec3 finalRgb = mix(baseColor.rgb, envColor, fresnel * 0.95);
+        gl_FragColor = vec4(finalRgb, baseColor.a);
     }
 `;
 
 let chromeScene, chromeCamera, chromeRenderer, chromeCube, chromePmremGenerator;
-let cubeSpinStartY   = 0;
-let cubeSpinTargetY  = 0;
-let cubeSpinStartTime = 0;
-let cubeSpinDuration  = 0;
-let cubeSpinning      = false;
-// Mouse‑driven target tilt for the cube
-let cubeMouseTargetX = 0;
-let cubeMouseTargetY = 0;
+// Base Y rotation (tweened on scroll); cursor follow adds on top
+let chromeCubeBase = { y: 0 };
+let chromeCubeMouseX = 0;
+let chromeCubeMouseY = 0;
+// Smoothed values for fluid cursor follow (eased toward mouse targets)
+let chromeCubeEasedX = 0;
+let chromeCubeEasedY = 0;
 
 // ✅ Accepts sliderImages as a parameter — no more scope error
 function initChromeCube(sliderImages) {
@@ -384,18 +405,31 @@ function initChromeCube(sliderImages) {
     chromeRenderer.domElement.style.position = "fixed";
     chromeRenderer.domElement.style.top = "0";
     chromeRenderer.domElement.style.left = "0";
-    chromeRenderer.domElement.style.zIndex = "2";
+    chromeRenderer.domElement.style.zIndex = "6";
     chromeRenderer.domElement.style.pointerEvents = "none";
     document.body.appendChild(chromeRenderer.domElement);
 
-    // Cube uses same WebGL transition as slider (noise + triangle reveal)
+    // Cube uses same WebGL transition as slider (noise + triangle reveal) + pattern.png overlay
     const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
     const firstTex = (sliderImages && sliderImages[0]) ? sliderImages[0] : null;
+    const patternLoader = new THREE.TextureLoader();
+    const patternTex = patternLoader.load('./pattern.png', function(tex) {
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(2, 2);
+        if (chromeCube && chromeCube.material && chromeCube.material.uniforms) {
+            var u = chromeCube.material.uniforms;
+            u.pattern.value = tex;
+            u.patternMix.value = 1.0;
+            chromeCube.material.needsUpdate = true;
+        }
+    });
     const material = new THREE.ShaderMaterial({
         uniforms: {
             dispFactor:   { type: 'f', value: 0.0 },
             currentImage: { type: 't', value: firstTex },
-            nextImage:    { type: 't', value: firstTex }
+            nextImage:    { type: 't', value: firstTex },
+            pattern:      { type: 't', value: patternTex },
+            patternMix:   { type: 'f', value: 0.0 }
         },
         vertexShader: CUBE_TRANSITION_VERTEX,
         fragmentShader: CUBE_TRANSITION_FRAGMENT,
@@ -409,7 +443,7 @@ function initChromeCube(sliderImages) {
     chromeScene.add(chromeCube);
 
     window.addEventListener("resize", onChromeResize, false);
-    window.addEventListener("mousemove", onChromeMouseMove, false);
+    window.addEventListener("mousemove", onChromeCubeMouseMove, false);
     animateChromeCube();
 
     // Apply first slide on cube (with transition shader, same image = no transition)
@@ -428,15 +462,26 @@ function initChromeCube(sliderImages) {
     }
 }
 
-// Expose a helper so the slider can trigger a 360° spin on Y (slow–fast–slow)
-window.startChromeCubeSpin = function (durationMs) {
-    if (!chromeCube) return;
-    cubeSpinStartY = chromeCube.rotation.y;
-    cubeSpinTargetY = cubeSpinStartY + Math.PI * 2;
-    cubeSpinStartTime = performance.now();
-    cubeSpinDuration = durationMs || 2200;
-    cubeSpinning = true;
+// Rotate cube 360° on Y when slide changes (scroll/click); same duration as transition
+window.rotateChromeCubeOnScroll = function (prevSlide, slideId, durationSeconds) {
+    if (!chromeCube || durationSeconds <= 0) return;
+    var direction = slideId > prevSlide ? 1 : -1;
+    var targetY = chromeCubeBase.y + direction * (Math.PI * 2);
+    TweenLite.to(chromeCubeBase, durationSeconds, {
+        y: targetY,
+        ease: 'Power2.easeInOut'
+    });
 };
+
+// Cursor follow: update target tilt from mouse position (subtle range for smooth look)
+function onChromeCubeMouseMove(e) {
+    var w = window.innerWidth || document.documentElement.clientWidth;
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    var nx = (e.clientX / w) - 0.5;  // -0.5 .. 0.5
+    var ny = (e.clientY / h) - 0.5;
+    chromeCubeMouseX = -ny * 0.35;   // pitch (up/down)
+    chromeCubeMouseY = nx * 0.5;    // yaw offset (left/right)
+}
 
 // Same WebGL transition on cube: noise + triangle reveal; duration in seconds (0 = instant set)
 window.updateChromeCubeTransition = function (tex, durationSeconds) {
@@ -513,41 +558,16 @@ function onChromeResize() {
     chromeRenderer.setSize(width, height);
 }
 
-// Update mouse target angles so the cube smoothly follows pointer movement
-function onChromeMouseMove(e) {
-    const width  = window.innerWidth  || document.documentElement.clientWidth;
-    const height = window.innerHeight || document.documentElement.clientHeight;
-    const nx = (e.clientX / width)  - 0.5; // -0.5 .. 0.5
-    const ny = (e.clientY / height) - 0.5; // -0.5 .. 0.5
-
-    // Map mouse to a gentle tilt range
-    cubeMouseTargetY = nx * 0.6;   // yaw left/right
-    cubeMouseTargetX = -ny * 0.4;  // pitch up/down
-}
-
 function animateChromeCube() {
     requestAnimationFrame(animateChromeCube);
 
     if (chromeCube) {
-        // Smoothly ease cube towards mouse‑driven tilt
-        chromeCube.rotation.x += (cubeMouseTargetX - chromeCube.rotation.x) * 0.02;
-
-        // Slow auto‑rotation around Y when not in a 360° spin
-        if (!cubeSpinning) {
-            chromeCube.rotation.y += 0.002;
-        }
-    }
-
-    if (cubeSpinning && chromeCube) {
-        const now = performance.now();
-        const t = Math.min(1, (now - cubeSpinStartTime) / cubeSpinDuration);
-        // easeInOutSine
-        const eased = 0.5 * (1 - Math.cos(Math.PI * t));
-        chromeCube.rotation.y = cubeSpinStartY + (cubeSpinTargetY - cubeSpinStartY) * eased;
-        if (t >= 1) {
-            cubeSpinning = false;
-            chromeCube.rotation.y = cubeSpinTargetY;
-        }
+        // Smooth cursor follow: ease both axes toward mouse targets (fluid motion)
+        var ease = 0.06;
+        chromeCubeEasedX += (chromeCubeMouseX - chromeCubeEasedX) * ease;
+        chromeCubeEasedY += (chromeCubeMouseY - chromeCubeEasedY) * ease;
+        chromeCube.rotation.x = chromeCubeEasedX;
+        chromeCube.rotation.y = chromeCubeBase.y + chromeCubeEasedY;
     }
 
     if (chromeRenderer && chromeScene && chromeCamera) {
