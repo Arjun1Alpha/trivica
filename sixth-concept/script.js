@@ -181,17 +181,18 @@ const displacementSlider = function(opts) {
             isAnimating = true;
             currentSlide = slideId;
 
+            const duration = 5.5;
+
             document.getElementById('pagination').querySelectorAll('.active')[0].className = '';
             pagButtons[slideId].className = 'active';
 
             mat.uniforms.nextImage.value = sliderImages[slideId];
             mat.uniforms.nextImage.needsUpdate = true;
 
-            if (window.updateChromeEnvFromTexture) {
-                window.updateChromeEnvFromTexture(sliderImages[slideId]);
+            if (window.updateChromeCubeTransition) {
+                window.updateChromeCubeTransition(sliderImages[slideId], duration);
             }
 
-            const duration = 5.5;
             if (window.startChromeCubeSpin) {
                 window.startChromeCubeSpin(duration * 1000);
             }
@@ -290,6 +291,66 @@ const displacementSlider = function(opts) {
 };
 
 // ---- Chrome cube in its own canvas (second renderer) ----
+// Same WebGL transition shader as slider (noise + triangle grid reveal)
+const CUBE_TRANSITION_VERTEX = `
+    varying vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+const CUBE_TRANSITION_FRAGMENT = `
+    varying vec2 vUv;
+    uniform sampler2D currentImage;
+    uniform sampler2D nextImage;
+    uniform float dispFactor;
+    float rand(vec2 co) {
+        return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+    float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = rand(i);
+        float b = rand(i + vec2(1.0, 0.0));
+        float c = rand(i + vec2(0.0, 1.0));
+        float d = rand(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+    float lineDist(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a, ba = b - a;
+        float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        return length(pa - ba * h);
+    }
+    float triangleGrid(vec2 uv, float scale, float lineWidth) {
+        vec2 g = uv * scale;
+        float pw = lineWidth;
+        vec2 local = fract(g);
+        float d = 1.0;
+        d = min(d, lineDist(local, vec2(0.0,0.0), vec2(1.0,0.0)));
+        d = min(d, lineDist(local, vec2(0.0,0.0), vec2(0.0,1.0)));
+        d = min(d, lineDist(local, vec2(1.0,0.0), vec2(0.0,1.0)));
+        d = min(d, lineDist(local, vec2(1.0,0.0), vec2(1.0,1.0)));
+        d = min(d, lineDist(local, vec2(0.0,1.0), vec2(1.0,1.0)));
+        return 1.0 - smoothstep(pw * 0.5, pw * 1.5, d);
+    }
+    void main() {
+        vec2 uv = vUv;
+        float t = smoothstep(0.0, 1.0, dispFactor);
+        float n  = noise(uv * 4.0)  * 0.5;
+        n += noise(uv * 8.0)  * 0.25;
+        n += noise(uv * 16.0) * 0.125;
+        n += noise(uv * 32.0) * 0.0625;
+        float reveal = n;
+        float edgeGrain = (rand(uv * 220.0) - 0.5) * 0.12 + (rand(uv * 470.0 + 0.5) - 0.5) * 0.06;
+        float grid = triangleGrid(uv, 30.0, 0.03);
+        reveal += edgeGrain * 0.8 + grid * 0.06;
+        float mask = smoothstep(reveal - 0.14, reveal + 0.14, t);
+        vec4 fromTex = texture2D(currentImage, uv);
+        vec4 toTex  = texture2D(nextImage, uv);
+        gl_FragColor = mix(fromTex, toTex, mask);
+    }
+`;
 
 let chromeScene, chromeCamera, chromeRenderer, chromeCube, chromePmremGenerator;
 let cubeSpinStartY   = 0;
@@ -311,6 +372,12 @@ function initChromeCube(sliderImages) {
     chromeCamera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     chromeCamera.position.set(0, 0, 6);
 
+    const ambient = new THREE.AmbientLight(0xffffff, 1);
+    chromeScene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(1, 1, 1);
+    chromeScene.add(dirLight);
+
     chromeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     chromeRenderer.setPixelRatio(window.devicePixelRatio);
     chromeRenderer.setSize(width, height);
@@ -321,18 +388,21 @@ function initChromeCube(sliderImages) {
     chromeRenderer.domElement.style.pointerEvents = "none";
     document.body.appendChild(chromeRenderer.domElement);
 
-    // PMREM generator to convert 2D slide textures into env maps
-    chromePmremGenerator = new THREE.PMREMGenerator(chromeRenderer);
-    chromePmremGenerator.compileEquirectangularShader();
-
-    // Slightly larger cube so it reads better over the background
+    // Cube uses same WebGL transition as slider (noise + triangle reveal)
     const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-    const material = new THREE.MeshPhysicalMaterial({
-        metalness: 1,
-        roughness: 0,
-        envMapIntensity: 1,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.5
+    const firstTex = (sliderImages && sliderImages[0]) ? sliderImages[0] : null;
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            dispFactor:   { type: 'f', value: 0.0 },
+            currentImage: { type: 't', value: firstTex },
+            nextImage:    { type: 't', value: firstTex }
+        },
+        vertexShader: CUBE_TRANSITION_VERTEX,
+        fragmentShader: CUBE_TRANSITION_FRAGMENT,
+        transparent: false,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: true
     });
 
     chromeCube = new THREE.Mesh(geometry, material);
@@ -342,18 +412,16 @@ function initChromeCube(sliderImages) {
     window.addEventListener("mousemove", onChromeMouseMove, false);
     animateChromeCube();
 
-    // ✅ Apply initial reflection from first slide texture on load
+    // Apply first slide on cube (with transition shader, same image = no transition)
     if (sliderImages && sliderImages[0]) {
         const firstTexture = sliderImages[0];
         if (firstTexture.image) {
-            // Already loaded — apply immediately
-            window.updateChromeEnvFromTexture(firstTexture);
+            window.updateChromeCubeTransition(firstTexture, 0);
         } else {
-            // Still loading — poll until the image data is ready
             const waitForTexture = setInterval(function () {
                 if (firstTexture.image) {
                     clearInterval(waitForTexture);
-                    window.updateChromeEnvFromTexture(firstTexture);
+                    window.updateChromeCubeTransition(firstTexture, 0);
                 }
             }, 50);
         }
@@ -370,50 +438,70 @@ window.startChromeCubeSpin = function (durationMs) {
     cubeSpinning = true;
 };
 
-// Expose a helper so the slider can update the cube's reflections
-window.updateChromeEnvFromTexture = function (tex, envResolution) {
-    if (!chromeScene || !chromePmremGenerator || !tex) return;
+// Same WebGL transition on cube: noise + triangle reveal; duration in seconds (0 = instant set)
+window.updateChromeCubeTransition = function (tex, durationSeconds) {
+    if (!chromeCube || !chromeCube.material || !chromeCube.material.uniforms) return;
+    if (!tex) return;
 
-    // envResolution controls the downscale — lower = blurrier/softer reflections
-    // e.g. 64, 128, 256 (default full-res is usually 1024+)
-    const res = envResolution || 1024;
+    function applyTransition() {
+        var u = chromeCube.material.uniforms;
+        u.nextImage.value = tex;
+        u.nextImage.needsUpdate = true;
 
-    // Wait for the texture image to be ready before sampling it
-    function applyEnv(sourceImage) {
-        const canvas = document.createElement('canvas');
-        canvas.width  = res;
-        canvas.height = res;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(sourceImage, 0, 0, res, res);
-
-        // Build a new THREE texture from the downscaled canvas
-        const smallTex = new THREE.CanvasTexture(canvas);
-        smallTex.mapping  = THREE.EquirectangularReflectionMapping;
-        smallTex.encoding = THREE.sRGBEncoding;
-
-        const envRT  = chromePmremGenerator.fromEquirectangular(smallTex);
-        const envMap = envRT.texture;
-
-        chromeScene.environment = envMap;
-
-        if (chromeCube && chromeCube.material) {
-            chromeCube.material.envMap = envMap;
-            chromeCube.material.needsUpdate = true;
+        if (durationSeconds > 0) {
+            TweenLite.to(u.dispFactor, durationSeconds, {
+                value: 1,
+                ease: 'Power2.easeInOut',
+                onComplete: function () {
+                    u.currentImage.value = tex;
+                    u.currentImage.needsUpdate = true;
+                    u.dispFactor.value = 0;
+                }
+            });
+        } else {
+            u.currentImage.value = tex;
+            u.currentImage.needsUpdate = true;
+            u.dispFactor.value = 0;
         }
-
-        smallTex.dispose();
     }
 
     if (tex.image) {
-        applyEnv(tex.image);
+        applyTransition();
+    } else {
+        var wait = setInterval(function () {
+            if (tex.image) {
+                clearInterval(wait);
+                applyTransition();
+            }
+        }, 50);
+    }
+};
+
+// Set the cube's map to the slide texture (instant, no transition)
+window.updateChromeMapFromTexture = function (tex) {
+    if (!chromeCube || !chromeCube.material || !tex) return;
+
+    function applyMap() {
+        chromeCube.material.map = tex;
+        chromeCube.material.needsUpdate = true;
+    }
+
+    if (tex.image) {
+        applyMap();
     } else {
         const wait = setInterval(function () {
             if (tex.image) {
                 clearInterval(wait);
-                applyEnv(tex.image);
+                applyMap();
             }
         }, 50);
     }
+};
+
+// Legacy: keep for any external refs; now a no-op (cube uses map, not env)
+window.updateChromeEnvFromTexture = function (tex, envResolution) {
+    if (!chromeCube) return;
+    // Cube now uses map for clear image; env reflection disabled
 };
 
 function onChromeResize() {
