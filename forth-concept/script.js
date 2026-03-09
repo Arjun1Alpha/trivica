@@ -1,10 +1,11 @@
-// Minimal Three.js scene that only shows the Mandalorian helmet
+// Minimal Three.js scene that only shows the cube (cube2.glb)
 
 let scene, camera, renderer;
 let helmet = null;
 let targetRotationY = 0;
 let swipeStartX = null;
 let canStepRotate = true; // allow one 90° step at a time
+let envMap = null; // shared env map for reflections
 
 init();
 animate();
@@ -28,22 +29,29 @@ function init() {
     renderer.toneMappingExposure = 1.0;
     document.body.appendChild(renderer.domElement);
 
-    // Use the background image as a simple natural environment map
+    // Environment map for reflections (used on each material explicitly so reflection works)
     const texLoader = new THREE.TextureLoader();
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    pmremGenerator.compileEquirectangularShader();
-
     texLoader.load(
         'Edge_Tower.jpg.jpeg',
         function (texture) {
             texture.mapping = THREE.EquirectangularReflectionMapping;
             texture.encoding = THREE.sRGBEncoding;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
 
-            const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+            // Use PMREM if available (smoother PBR reflections); otherwise use texture directly
+            if (typeof THREE.PMREMGenerator !== 'undefined') {
+                const pmremGenerator = new THREE.PMREMGenerator(renderer);
+                pmremGenerator.compileEquirectangularShader();
+                envMap = pmremGenerator.fromEquirectangular(texture).texture;
+                texture.dispose();
+                pmremGenerator.dispose();
+            } else {
+                envMap = texture;
+            }
+
             scene.environment = envMap;
-
-            texture.dispose();
-            pmremGenerator.dispose();
+            applyEnvMapToModel(helmet);
         }
     );
 
@@ -153,27 +161,44 @@ function init() {
                         mat.transparent = false;
                         mat.opacity = 1.0;
                         if ('metalness' in mat) mat.metalness = 1.0;
-                        if ('roughness' in mat) mat.roughness = 0.3;
-                        if ('envMapIntensity' in mat) mat.envMapIntensity = 1.5;
+                        if ('roughness' in mat) mat.roughness = 0;
+                        if ('envMapIntensity' in mat) mat.envMapIntensity = 1;
                         if ('emissive' in mat) {
                             mat.emissive = new THREE.Color(0x222222);
-                            mat.emissiveIntensity = 0.3;
+                            mat.emissiveIntensity = 0.1;
                         }
                     });
                 }
             });
 
             scene.add(helmet);
+            applyEnvMapToModel(helmet); // apply env map so reflections work (if already loaded)
             // start from current orientation
             targetRotationY = helmet.rotation.y;
         },
         undefined,
         function (error) {
-            console.error('Error loading mandalorian_helmet.glb:', error);
+            console.error('Error loading cube2.glb:', error);
         }
     );
 
     window.addEventListener('resize', onWindowResize, false);
+}
+
+// Apply the shared env map to every material in the model so reflections work
+function applyEnvMapToModel(model) {
+    if (!model || !envMap) return;
+    model.traverse(function (child) {
+        if (child.isMesh && child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(function (mat) {
+                if ('envMap' in mat) {
+                    mat.envMap = envMap;
+                }
+                if ('envMapIntensity' in mat) mat.envMapIntensity = 1.5;
+            });
+        }
+    });
 }
 
 function onWindowResize() {

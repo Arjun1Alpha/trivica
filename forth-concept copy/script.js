@@ -124,7 +124,7 @@ function init() {
 
     const loader = new THREE.GLTFLoader();
     loader.load(
-        'cube2.glb',
+        'box4.glb',
         function (gltf) {
             helmet = gltf.scene;
 
@@ -153,12 +153,12 @@ function init() {
                         mat.transparent = false;
                         mat.opacity = 1.0;
                         if ('metalness' in mat) mat.metalness = 1.0;
-                        if ('roughness' in mat) mat.roughness = 0.3;
-                        if ('envMapIntensity' in mat) mat.envMapIntensity = 1.5;
-                        if ('emissive' in mat) {
-                            mat.emissive = new THREE.Color(0x222222);
-                            mat.emissiveIntensity = 0.3;
-                        }
+                        if ('roughness' in mat) mat.roughness = 1.0;
+                        // if ('envMapIntensity' in mat) mat.envMapIntensity = 1.0;
+                        // if ('emissive' in mat) {
+                        //     mat.emissive = new THREE.Color(0x222222);
+                        //     mat.emissiveIntensity = 0.3;
+                        // }
                     });
                 }
             });
